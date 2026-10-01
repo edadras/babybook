@@ -3,6 +3,7 @@
 namespace App\Models\StoryStudio;
 
 use App\Enums\StoryStudio\AspectRatio;
+use App\Enums\StoryStudio\AssetStatus;
 use App\Enums\StoryStudio\AssetType;
 use App\Enums\StoryStudio\GenerationMode;
 use App\Enums\StoryStudio\NarrationStyle;
@@ -70,6 +71,14 @@ class StoryProject extends Model
             'duration_ms' => 'integer',
             'paused_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'work_state' => 'array',
+            'script_approved_at' => 'datetime',
+            'characters_approved_at' => 'datetime',
+            'voices_approved_at' => 'datetime',
+            'storyboard_approved_at' => 'datetime',
+            'review_approved_at' => 'datetime',
+            'cost_confirmed_at' => 'datetime',
+            'estimated_cost' => 'decimal:6',
         ];
     }
 
@@ -163,6 +172,27 @@ class StoryProject extends Model
     public function finalVideo(): ?StoryAsset
     {
         return $this->assets()->where('type', AssetType::FinalVideo)->selected()->latest('version')->first();
+    }
+
+    public function workState(string $key): AssetStatus
+    {
+        return AssetStatus::tryFrom($this->work_state[$key] ?? '') ?? AssetStatus::Pending;
+    }
+
+    public function setWorkState(string $key, AssetStatus $status): void
+    {
+        $this->refresh();
+        $this->forceFill(['work_state' => array_merge($this->work_state ?? [], [$key => $status->value])])->save();
+    }
+
+    public function narrator(): ?StoryCharacter
+    {
+        return $this->characters()->where('is_narrator', true)->first();
+    }
+
+    public function latestAsset(AssetType $type): ?StoryAsset
+    {
+        return $this->assets()->where('type', $type)->selected()->latest('version')->first();
     }
 
     public function isEditable(): bool

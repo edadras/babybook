@@ -20,6 +20,7 @@ class StoryProjectSetting extends Model
         'default_transition',
         'transition_duration_ms',
         'music_volume',
+        'default_music_audio_id',
         'ducking_db',
         'subtitle_mode',
         'burn_subtitles',

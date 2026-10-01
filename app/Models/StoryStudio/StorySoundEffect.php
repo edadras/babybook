@@ -57,6 +57,16 @@ class StorySoundEffect extends Model
         return $this->belongsTo(StoryScene::class, 'scene_id');
     }
 
+    public function selectedAudio(): ?StoryAudioAsset
+    {
+        return $this->audioAssets()->selected()->latest('version')->first();
+    }
+
+    public function slot(): string
+    {
+        return 'sfx:'.$this->getKey();
+    }
+
     public function audioAssets(): HasMany
     {
         return $this->hasMany(StoryAudioAsset::class, 'sound_effect_id');

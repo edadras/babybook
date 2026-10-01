@@ -1,5 +1,16 @@
 <?php
 
+use App\Services\StoryStudio\Providers\ElevenLabs\ElevenLabsSoundEffectProvider;
+use App\Services\StoryStudio\Providers\ElevenLabs\ElevenLabsSpeechProvider;
+use App\Services\StoryStudio\Providers\ElevenLabs\ElevenLabsVoiceDesignProvider;
+use App\Services\StoryStudio\Providers\Fake\FakeImageProvider;
+use App\Services\StoryStudio\Providers\Fake\FakeSoundEffectProvider;
+use App\Services\StoryStudio\Providers\Fake\FakeSpeechProvider;
+use App\Services\StoryStudio\Providers\Fake\FakeStoryDirectorProvider;
+use App\Services\StoryStudio\Providers\Fake\FakeVoiceDesignProvider;
+use App\Services\StoryStudio\Providers\OpenAI\OpenAIImageProvider;
+use App\Services\StoryStudio\Providers\OpenAI\OpenAIStoryDirectorProvider;
+
 /*
 |--------------------------------------------------------------------------
 | AI Story Studio (استودیو داستان هوشمند)
@@ -27,7 +38,8 @@ return [
     ],
 
     'storage' => [
-        'disk' => env('STORY_STUDIO_DISK', 'public'),
+        // Private by default: files are streamed through an authorized controller.
+        'disk' => env('STORY_STUDIO_DISK', 'local'),
         'root' => env('STORY_STUDIO_STORAGE_ROOT', 'story-studio'),
     ],
 
@@ -41,13 +53,41 @@ return [
 
     // Which implementation each capability uses. Additional providers can be
     // registered in StoryStudioServiceProvider without touching controllers.
+    // STORY_STUDIO_FAKE_PROVIDERS=true switches every capability to the offline
+    // fakes (deterministic placeholder images/tones) for demos and tests.
     'providers' => [
-        'director' => env('STORY_STUDIO_DIRECTOR_PROVIDER', 'openai'),
-        'image' => env('STORY_STUDIO_IMAGE_PROVIDER', 'openai'),
-        'speech' => env('STORY_STUDIO_SPEECH_PROVIDER', 'elevenlabs'),
-        'voice_design' => env('STORY_STUDIO_VOICE_DESIGN_PROVIDER', 'elevenlabs'),
-        'sound_effects' => env('STORY_STUDIO_SFX_PROVIDER', 'elevenlabs'),
+        'director' => env('STORY_STUDIO_FAKE_PROVIDERS', false) ? 'fake' : env('STORY_STUDIO_DIRECTOR_PROVIDER', 'openai'),
+        'image' => env('STORY_STUDIO_FAKE_PROVIDERS', false) ? 'fake' : env('STORY_STUDIO_IMAGE_PROVIDER', 'openai'),
+        'speech' => env('STORY_STUDIO_FAKE_PROVIDERS', false) ? 'fake' : env('STORY_STUDIO_SPEECH_PROVIDER', 'elevenlabs'),
+        'voice_design' => env('STORY_STUDIO_FAKE_PROVIDERS', false) ? 'fake' : env('STORY_STUDIO_VOICE_DESIGN_PROVIDER', 'elevenlabs'),
+        'sound_effects' => env('STORY_STUDIO_FAKE_PROVIDERS', false) ? 'fake' : env('STORY_STUDIO_SFX_PROVIDER', 'elevenlabs'),
     ],
+
+    // Implementation registry. Add a provider by implementing the contract and listing it here.
+    'provider_classes' => [
+        'director' => [
+            'openai' => OpenAIStoryDirectorProvider::class,
+            'fake' => FakeStoryDirectorProvider::class,
+        ],
+        'image' => [
+            'openai' => OpenAIImageProvider::class,
+            'fake' => FakeImageProvider::class,
+        ],
+        'speech' => [
+            'elevenlabs' => ElevenLabsSpeechProvider::class,
+            'fake' => FakeSpeechProvider::class,
+        ],
+        'voice_design' => [
+            'elevenlabs' => ElevenLabsVoiceDesignProvider::class,
+            'fake' => FakeVoiceDesignProvider::class,
+        ],
+        'sound_effects' => [
+            'elevenlabs' => ElevenLabsSoundEffectProvider::class,
+            'fake' => FakeSoundEffectProvider::class,
+        ],
+    ],
+
+    'log_channel' => env('STORY_STUDIO_LOG_CHANNEL', env('LOG_CHANNEL', 'stack')),
 
     'openai' => [
         'director_model' => env('STORY_STUDIO_OPENAI_DIRECTOR_MODEL', 'gpt-5'),
@@ -61,7 +101,12 @@ return [
         'voice_design_model' => env('STORY_STUDIO_ELEVENLABS_VOICE_DESIGN_MODEL', 'eleven_ttv_v3'),
         'output_format' => env('STORY_STUDIO_ELEVENLABS_OUTPUT_FORMAT', 'mp3_44100_128'),
         'timeout' => (int) env('STORY_STUDIO_ELEVENLABS_TIMEOUT', 120),
+        'sfx_model' => env('STORY_STUDIO_ELEVENLABS_SFX_MODEL', 'eleven_text_to_sound_v2'),
+        'language_code' => env('STORY_STUDIO_ELEVENLABS_LANGUAGE', null),
+        // Used in automatic mode instead of designing a narrator voice.
         'default_narrator_voice_id' => env('STORY_STUDIO_DEFAULT_NARRATOR_VOICE_ID'),
+        // Optional per character key: ['little_rabbit' => 'voiceId', ...]
+        'default_voices' => [],
     ],
 
     'http' => [
@@ -79,6 +124,9 @@ return [
         'ffprobe' => env('FFPROBE_BINARY', 'ffprobe'),
         'timeout' => (int) env('STORY_STUDIO_FFMPEG_TIMEOUT', 1800),
         'subtitle_font' => env('STORY_STUDIO_SUBTITLE_FONT', 'Vazirmatn'),
+        'fonts_dir' => env('STORY_STUDIO_FONTS_DIR', resource_path('fonts')),
+        'preset' => env('STORY_STUDIO_FFMPEG_PRESET', 'veryfast'),
+        'final_preset' => env('STORY_STUDIO_FFMPEG_FINAL_PRESET', 'medium'),
     ],
 
     'limits' => [

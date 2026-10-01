@@ -4,6 +4,7 @@ namespace App\Models\StoryStudio;
 
 use App\Enums\StoryStudio\AssetStatus;
 use App\Enums\StoryStudio\AssetType;
+use App\Enums\StoryStudio\AudioAssetType;
 use App\Enums\StoryStudio\ImageMotion;
 use App\Enums\StoryStudio\Transition;
 use Database\Factories\StoryStudio\StorySceneFactory;
@@ -33,6 +34,7 @@ class StoryScene extends Model
         'duration_ms',
         'narration_original',
         'narration_tts',
+        'narration_en',
         'visual',
         'director_prompt',
         'final_image_prompt',
@@ -75,6 +77,7 @@ class StoryScene extends Model
             'music_fade_out_ms' => 'integer',
             'status' => AssetStatus::class,
             'stale_flags' => 'array',
+            'work_state' => 'array',
             'approved_at' => 'datetime',
         ];
     }
@@ -134,6 +137,38 @@ class StoryScene extends Model
     public function effectiveDurationMs(): int
     {
         return $this->duration_ms ?? $this->duration_estimate_ms ?? 8000;
+    }
+
+    public function workState(string $key): AssetStatus
+    {
+        return AssetStatus::tryFrom($this->work_state[$key] ?? '') ?? AssetStatus::Pending;
+    }
+
+    /**
+     * Atomically merges work-state keys (re-reads first so concurrent jobs don't clobber each other).
+     *
+     * @param  array<string, AssetStatus>  $states
+     */
+    public function setWorkState(array $states): void
+    {
+        $fresh = static::query()->whereKey($this->getKey())->value('work_state');
+        $current = is_string($fresh) ? (json_decode($fresh, true) ?: []) : ($fresh ?? []);
+
+        foreach ($states as $key => $status) {
+            $current[$key] = $status->value;
+        }
+
+        $this->forceFill(['work_state' => $current])->save();
+    }
+
+    public function selectedAudio(AudioAssetType $type): ?StoryAudioAsset
+    {
+        return $this->audioAssets()->where('type', $type)->selected()->latest('version')->first();
+    }
+
+    public function slot(string $kind): string
+    {
+        return 'scene:'.$this->getKey().':'.$kind;
     }
 
     public function imageSlot(): string

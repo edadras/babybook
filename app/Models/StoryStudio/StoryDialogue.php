@@ -19,6 +19,7 @@ class StoryDialogue extends Model
         'sort_order',
         'text_original',
         'text_tts',
+        'text_en',
         'emotion',
         'energy',
         'pace',
@@ -54,6 +55,16 @@ class StoryDialogue extends Model
     public function character(): BelongsTo
     {
         return $this->belongsTo(StoryCharacter::class, 'character_id');
+    }
+
+    public function selectedAudio(): ?StoryAudioAsset
+    {
+        return $this->audioAssets()->selected()->latest('version')->first();
+    }
+
+    public function slot(): string
+    {
+        return 'dialogue:'.$this->getKey();
     }
 
     public function audioAssets(): HasMany
