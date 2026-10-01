@@ -1,7 +1,7 @@
 {{-- Project cover, or a deterministic gradient placeholder with the title's first letter. --}}
 <div class="cover">
-    @if ($project->cover?->url())
-        <img src="{{ $project->cover->url() }}" alt="جلد {{ $project->title }}" loading="lazy">
+    @if ($project->cover?->file_path)
+        <img src="{{ route('story-studio.files.show', ['asset', $project->cover->id]) }}" alt="جلد {{ $project->title }}" loading="lazy">
     @else
         <div class="cover-placeholder hue-{{ crc32($project->id) % 6 }}" aria-hidden="true">{{ mb_substr($project->title, 0, 1) }}</div>
     @endif

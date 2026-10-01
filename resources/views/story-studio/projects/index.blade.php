@@ -71,10 +71,10 @@
                     <div class="card-actions">
                         <a href="{{ route('story-studio.projects.show', $project) }}" class="btn btn-primary btn-sm">ادامه پروژه</a>
                         <a href="{{ route('story-studio.projects.edit', $project) }}" class="btn btn-sm">ویرایش</a>
-                        @php($final = $project->status === ProjectStatus::Completed)
-                        <span class="btn btn-sm btn-ghost is-disabled" title="پس از ساخت صحنه‌ها فعال می‌شود">پیش‌نمایش</span>
-                        <span @class(['btn btn-sm btn-ghost', 'is-disabled' => $project->status !== ProjectStatus::ReadyForReview]) title="پس از بازبینی فعال می‌شود">رندر نهایی</span>
-                        <span @class(['btn btn-sm btn-ghost', 'is-disabled' => ! $final]) title="پس از رندر نهایی فعال می‌شود">دانلود</span>
+                        @php($hasFinal = $project->work_state['final'] ?? null)
+                        <a @class(['btn btn-sm btn-ghost', 'is-disabled' => ! $project->scenes_count]) href="{{ route($hasFinal ? 'story-studio.projects.export' : 'story-studio.projects.storyboard', $project) }}">پیش‌نمایش</a>
+                        <a @class(['btn btn-sm btn-ghost', 'is-disabled' => ! $project->scenes_count]) href="{{ route('story-studio.projects.render', $project) }}">رندر نهایی</a>
+                        <a @class(['btn btn-sm btn-ghost', 'is-disabled' => ! $hasFinal]) href="{{ route('story-studio.projects.export', $project) }}">دانلود</a>
                     </div>
                 </article>
             @endforeach

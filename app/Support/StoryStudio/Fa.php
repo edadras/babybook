@@ -66,6 +66,27 @@ final class Fa
         return self::digits(sprintf('%d:%02d', intdiv($seconds, 60), $seconds % 60));
     }
 
+    /**
+     * US dollar amount, e.g. "$0.42".
+     */
+    public static function money(float|int|string|null $usd, int $decimals = 2): string
+    {
+        return '$'.number_format((float) $usd, (float) $usd > 0 && (float) $usd < 0.01 ? 4 : $decimals);
+    }
+
+    public static function gateLabel(?string $gate): ?string
+    {
+        return match ($gate) {
+            'safety' => 'بررسی هشدارهای محتوایی',
+            'script' => 'تأیید فیلمنامه (تحلیل و صحنه‌ها)',
+            'characters' => 'تأیید و قفل شخصیت‌ها',
+            'voices' => 'تأیید صداها',
+            'storyboard' => 'تأیید استوری‌بورد',
+            'review' => 'بازبینی نهایی پیش از رندر',
+            default => null,
+        };
+    }
+
     public static function language(?string $code): string
     {
         return match ($code) {

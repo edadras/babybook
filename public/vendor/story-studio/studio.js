@@ -121,16 +121,25 @@
     }
 
     /* ---------- Live progress (polling) ---------- */
+    let formDirty = false;
+    document.addEventListener('input', (event) => {
+        if (event.target.closest('form')) formDirty = true;
+    });
+
     function initProgress(root) {
         const url = root.dataset.progressUrl;
+        const initialSignature = root.dataset.signature;
+        const toast = root.querySelector('[data-refresh-toast]');
         let timer = null;
+
+        root.querySelector('[data-refresh-now]')?.addEventListener('click', () => window.location.reload());
 
         function render(data) {
             root.querySelector('[data-progress-value]').textContent = toPersian(data.progress) + '٪';
             root.querySelector('[data-progress-bar]').style.width = data.progress + '%';
             const pill = root.querySelector('[data-status-pill]');
             if (pill) {
-                pill.textContent = data.status_label;
+                pill.textContent = data.paused ? 'متوقف' : data.status_label;
                 pill.className = 'pill tone-' + data.status_tone;
             }
             data.stages.forEach((stage) => {
@@ -140,7 +149,17 @@
                 item.querySelector('.dot').textContent = stage.state === 'done' ? '✓' : (stage.state === 'failed' ? '!' : '');
                 item.querySelector('.count').textContent = stage.total ? toPersian(stage.done) + '/' + toPersian(stage.total) : '';
             });
-            schedule(data.working);
+
+            if (data.signature !== initialSignature) {
+                const editing = formDirty || (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName));
+                const playing = Array.from(document.querySelectorAll('audio, video')).some((m) => !m.paused);
+                if (!editing && !playing) {
+                    window.location.reload();
+                    return;
+                }
+                if (toast) toast.hidden = false;
+            }
+            schedule(data.working || data.running);
         }
 
         function poll() {
@@ -150,17 +169,71 @@
                 .catch(() => schedule(true, 10000));
         }
 
-        function schedule(working, delay) {
+        function schedule(active, delay) {
             clearTimeout(timer);
             if (document.hidden) return;
-            timer = setTimeout(poll, delay || (working ? 2500 : 15000));
+            timer = setTimeout(poll, delay || (active ? 3000 : 20000));
         }
 
         document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
-        schedule(root.dataset.working === '1');
+        schedule(root.dataset.working === '1', root.dataset.working === '1' ? 2500 : 6000);
+    }
+
+    /* ---------- Storyboard drag & drop ordering ---------- */
+    function initReorder(container) {
+        const url = container.dataset.reorderUrl;
+        const token = document.querySelector('meta[name="csrf-token"]').content;
+        let dragged = null;
+
+        container.addEventListener('dragstart', (event) => {
+            const card = event.target.closest('.scene-card');
+            if (!card || event.target.closest('details[open], input, textarea, select, button, audio, video')) return;
+            dragged = card;
+            card.classList.add('dragging');
+            event.dataTransfer.effectAllowed = 'move';
+        });
+        container.addEventListener('dragover', (event) => {
+            if (!dragged) return;
+            event.preventDefault();
+            const target = event.target.closest('.scene-card');
+            container.querySelectorAll('.drop-before').forEach((el) => el.classList.remove('drop-before'));
+            if (target && target !== dragged) target.classList.add('drop-before');
+        });
+        container.addEventListener('drop', (event) => {
+            if (!dragged) return;
+            event.preventDefault();
+            const target = event.target.closest('.scene-card');
+            if (target && target !== dragged) container.insertBefore(dragged, target);
+            finish(true);
+        });
+        container.addEventListener('dragend', () => finish(false));
+
+        function finish(save) {
+            container.querySelectorAll('.drop-before').forEach((el) => el.classList.remove('drop-before'));
+            if (!dragged) return;
+            dragged.classList.remove('dragging');
+            dragged = null;
+            if (!save) return;
+            const order = Array.from(container.querySelectorAll('.scene-card')).map((card) => card.dataset.sceneId);
+            container.querySelectorAll('.scene-num').forEach((num, i) => { num.textContent = toPersian(i + 1); });
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': token },
+                credentials: 'same-origin',
+                body: JSON.stringify({ order }),
+            }).then((response) => { if (!response.ok) window.location.reload(); });
+        }
+    }
+
+    /* Mixed Persian/English content: let each field pick its direction from what is typed. */
+    function initBidi() {
+        document.querySelectorAll('input:not([type]), input[type=text], input[type=search], textarea').forEach((field) => {
+            if (!field.hasAttribute('dir') && !field.classList.contains('ltr-input')) field.setAttribute('dir', 'auto');
+        });
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        initBidi();
         document.querySelectorAll('form[data-wizard]').forEach((form) => {
             initWizard(form);
             initStyleToggle(form);
@@ -168,5 +241,6 @@
         initCounters();
         initConfirms();
         document.querySelectorAll('[data-progress-url]').forEach(initProgress);
+        document.querySelectorAll('[data-reorder-url]').forEach(initReorder);
     });
 })();

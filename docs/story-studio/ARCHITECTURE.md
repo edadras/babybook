@@ -1,7 +1,7 @@
 # AI Story Studio — Technical Plan & Database Schema
 استودیو داستان هوشمند
 
-Status: Phase 1 implemented (schema, models, project CRUD, dashboard, wizard, studio shell).
+Status: Phases 1–10 implemented. Tests: 57 passing on SQLite and MariaDB 10.11.
 Target: Laravel 11+/13, PHP 8.3, MySQL 8, Redis queues, FFmpeg 6.
 
 ---
@@ -23,7 +23,7 @@ app/
   Policies/StoryStudio/
   Providers/StoryStudioServiceProvider.php   routes, gate, policy, provider bindings
   Services/StoryStudio/
-    Contracts/                       (phase 2+) provider interfaces
+    Contracts/                       provider interfaces
       StoryDirectorProviderInterface, ImageGenerationProviderInterface,
       SpeechProviderInterface, VoiceDesignProviderInterface, SoundEffectProviderInterface
     Providers/OpenAI/*, Providers/ElevenLabs/*, Providers/Fake/*
@@ -32,7 +32,7 @@ app/
     StoryPipelineService, DependencyInvalidator, GenerationGuard, CostTracker,
     AudioMixService, VideoRenderService, SubtitleService, CoverService,
     SafetyAnalysisService, ProjectProgressService
-  Jobs/StoryStudio/                  (phase 2+) one job per expensive step
+  Jobs/StoryStudio/                  one job per expensive step
   Support/StoryStudio/Fa.php         Persian digits, Jalali dates, durations
 config/story-studio.php              providers, models, prices, disks, queues, access, limits
 routes/story-studio.php              mounted at /studio (configurable prefix + middleware)
@@ -268,6 +268,51 @@ echo "STORY_STUDIO_ADMIN_EMAILS=you@example.com" >> .env
 # …or, for local experiments only:
 echo "STORY_STUDIO_ALLOW_GUESTS=true" >> .env
 php artisan serve        # → http://127.0.0.1:8000/studio
-php artisan queue:work --queue=story-ai,story-images,story-audio,story-render   # phase 2+
+php artisan queue:work --queue=story-ai,story-images,story-audio,story-render --timeout=3600
 php artisan test
 ```
+
+## 7. Operations
+
+### Providers and keys
+```
+OPENAI_API_KEY=sk-...
+ELEVENLABS_API_KEY=...
+STORY_STUDIO_OPENAI_DIRECTOR_MODEL=gpt-5        # structured analysis
+STORY_STUDIO_OPENAI_IMAGE_MODEL=gpt-image-1
+STORY_STUDIO_ELEVENLABS_TTS_MODEL=eleven_v3     # v3 understands [audio tags]
+STORY_STUDIO_DEFAULT_NARRATOR_VOICE_ID=          # optional, used by automatic mode
+```
+Keys are only read server-side through `config/services.php`. They never reach views or JavaScript,
+and provider errors and logs are redacted.
+
+### Demo mode without API keys
+`STORY_STUDIO_FAKE_PROVIDERS=true` swaps every provider for a deterministic offline fake:
+the analysis comes from a paragraph splitter, images are GD placeholders, and voices and effects are FFmpeg tones.
+The whole pipeline, including the real FFmpeg mixing and rendering, can run end to end this way.
+The test suite uses the same mode.
+
+### Queue
+Use Redis or the database queue. Every expensive step is a separate retryable job on four queues:
+
+| queue | jobs |
+|---|---|
+| `story-ai` | AnalyzeStoryJob, GenerateCharacterBibleJob |
+| `story-images` | GenerateCharacterReferenceJob, GenerateSceneImageJob, GenerateCoverArtJob |
+| `story-audio` | GenerateVoiceCandidatesJob, GenerateVoicePreviewJob, GenerateSceneNarrationJob, GenerateSceneDialogueJob, GenerateSoundEffectJob |
+| `story-render` | MixSceneAudioJob, RenderSceneJob, RenderFinalVideoJob |
+
+Rendering is CPU-heavy, so give `story-render` its own worker(s) with a long `--timeout`.
+
+### Adding a provider
+1. Implement the contract, e.g. `ImageGenerationProviderInterface`.
+2. Register it under `story-studio.provider_classes.image.<name>`.
+3. Set `STORY_STUDIO_IMAGE_PROVIDER=<name>`. Controllers and services do not change.
+
+### How regeneration stays cheap
+- Every billable call goes through `GenerationGuard`. Its idempotency key hashes the operation, the target,
+  the exact input (prompt, text or voice) and a nonce. A queue retry reuses the key, so it is never billed twice.
+  An explicit "regenerate" click uses a new nonce.
+- Changing an input marks only its dependents stale (`DependencyInvalidator`).
+  "Continue building" (ادامه ساخت) then regenerates just those items.
+  Completed and selected assets are reused, and old versions are kept.

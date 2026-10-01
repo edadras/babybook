@@ -178,26 +178,23 @@ class StoryProjectCrudTest extends TestCase
         $this->get(route('story-studio.projects.show', $project))->assertNotFound();
     }
 
-    public function test_progress_endpoint_returns_stage_summary(): void
+    public function test_progress_endpoint_reports_live_stage_counts(): void
     {
         $project = StoryProject::factory()->create();
-        $project->pipelineRuns()->create([
-            'mode' => 'manual',
-            'status' => 'running',
-            'current_stage' => 'images',
-            'stage_states' => [
-                'analyze' => ['status' => 'done'],
-                'images' => ['status' => 'running', 'done' => 9, 'total' => 12],
-            ],
-        ]);
+        $project->forceFill(['story_metadata' => ['title' => 'x']])->save();
+        foreach (range(1, 4) as $n) {
+            $scene = $project->scenes()->create(['scene_number' => $n, 'sort_order' => $n, 'narration_original' => 'متن']);
+            $scene->forceFill(['work_state' => ['image' => $n <= 3 ? 'ready' : 'generating']])->save();
+        }
 
         $this->getJson(route('story-studio.projects.progress', $project))
             ->assertOk()
             ->assertJsonPath('status', 'draft')
-            ->assertJsonPath('current_stage', 'images')
-            ->assertJsonPath('stages.0.state', 'done')
-            ->assertJsonPath('stages.5.done', 9)
-            ->assertJsonPath('stages.5.total', 12)
+            ->assertJsonPath('stages.5.key', 'images')
+            ->assertJsonPath('stages.5.done', 3)
+            ->assertJsonPath('stages.5.total', 4)
+            ->assertJsonPath('stages.5.state', 'running')
+            ->assertJsonPath('gate', 'script')
             ->assertJsonCount(11, 'stages');
     }
 
